@@ -5,6 +5,10 @@ import os
 import json
 import hashlib
 import sqlite3
+import pandas as pd
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import datetime
 
 app = Flask(__name__)
@@ -18,12 +22,14 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # ✅ IMPORTANT: FIXED PATHS
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 REFERENCE_FILES = [
-    "data/max_serves/max1.csv",
-    "data/max_serves/max2.csv",
-    "data/max_serves/max3.csv",
-    "data/max_serves/max4.csv",
-    "data/max_serves/max5.csv",
+    os.path.join(BASE_DIR, "data/max_serves/max1.csv"),
+    os.path.join(BASE_DIR, "data/max_serves/max2.csv"),
+    os.path.join(BASE_DIR, "data/max_serves/max3.csv"),
+    os.path.join(BASE_DIR, "data/max_serves/max4.csv"),
+    os.path.join(BASE_DIR, "data/max_serves/max5.csv"),
 ]
 
 # ── DATABASE ─────────────────────────────────────────────
@@ -49,7 +55,10 @@ def init_db():
     conn.commit()
     conn.close()
 
-
+# session of a user with a specific reference player and score, 
+# along with the filename and timestamp. 
+# This allows us to track the user's progress over time and provide- 
+# feedback based on their performance compared to the reference player.
 def save_session(username, filename, player_key, player_name, player_style, score):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
@@ -127,25 +136,17 @@ PLAYER_FEEDBACK = {
 # ── GRAPH FUNCTION ─────────────────────────────────────────
 
 
-def create_plot(user_file):
-    user = load_csv(user_file)
-    mean, _ = build_reference_model(REFERENCE_FILES)
-
-    min_len = min(len(user), len(mean))
-    user = user[:min_len]
-    mean = mean[:min_len]
-
+def create_plot(file_path):
+    df = pd.read_csv(file_path, skiprows=3, header=None)
+    numeric = df.select_dtypes(include=[np.number])
+    
     plt.figure()
-    plt.plot(user[:, 0], label="User")
-    plt.plot(mean[:, 0], label="Reference")
-    plt.legend()
-
-    plot_path = os.path.join("static", "plot.png")
+    plt.plot(numeric.values)
+    plot_filename = "plot.png"
+    plot_path = os.path.join("static", plot_filename)
     plt.savefig(plot_path)
     plt.close()
-
-    return plot_path
-
+    return plot_filename
 
 # ── ROUTES ───────────────────────────────────────────────
 
@@ -269,6 +270,9 @@ def upload():
         plot_path = create_plot(save_path)
 
     except Exception as e:
+        print(f"UPLOAD ERROR: {e}")
+        import traceback
+        traceback.print_exc()
         flash(f"Error processing file: {str(e)}")
         return redirect(url_for("analyse"))
 
