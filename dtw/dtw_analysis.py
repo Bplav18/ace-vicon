@@ -1,7 +1,8 @@
 import os
 
 import numpy as np
-from tslearn.barycenters import dtw_barycenter_averaging
+from dtw import dtw
+from scipy.spatial.distance import cdist
 
 from prepare_data import load_prepared_serves
 
@@ -11,12 +12,38 @@ DATA_DIR = os.path.join(
 OUT_PATH = os.path.join(os.path.dirname(__file__), "barycenter.npy")
 
 
-def compute_barycenter(dirpath=DATA_DIR, out_path=OUT_PATH):
-    """Load all serves, compute the DTW barycenter, and save it.
+def _dba_update(barycenter, arrays):
+    """One DBA iteration: align each series to the barycenter and average.
+
+    For each series, computes the DTW warping path against the current
+    barycenter, then updates each barycenter frame as the mean of all
+    series frames mapped to it.
+    """
+    n = barycenter.shape[0]
+    accum = [[] for _ in range(n)]
+
+    for arr in arrays:
+        dist_mat = cdist(arr, barycenter)
+        alignment = dtw(dist_mat, distance_only=False)
+        for i, j in zip(alignment.index1, alignment.index2):
+            accum[j].append(arr[i])
+
+    new_bc = np.zeros_like(barycenter)
+    for j in range(n):
+        if accum[j]:
+            new_bc[j] = np.mean(accum[j], axis=0)
+        else:
+            new_bc[j] = barycenter[j]
+    return new_bc
+
+
+def compute_barycenter(dirpath=DATA_DIR, out_path=OUT_PATH, n_iter=30):
+    """Load all serves, compute the DTW barycenter via DBA, and save it.
 
     Args:
         dirpath: folder of multi-marker Vicon CSVs (unmarked_edited)
         out_path: .npy file to write the barycenter to
+        n_iter: number of DBA iterations (default 30)
 
     Returns:
         barycenter as np.ndarray of shape (n_frames, n_features)
@@ -24,11 +51,17 @@ def compute_barycenter(dirpath=DATA_DIR, out_path=OUT_PATH):
     arrays = load_prepared_serves(dirpath)
     print(f"Loaded {len(arrays)} valid serves")
 
-    # Pass the list of arrays directly — to_time_series_dataset pads with NaN
-    # which causes dtw_barycenter_averaging to return None on the full dataset
-    barycenter = dtw_barycenter_averaging(arrays)
-    print(f"Barycenter shape: {barycenter.shape}")
+    # Initialise with the series closest to the median length to avoid
+    # extreme-length bias in the first round of alignments.
+    lengths = [a.shape[0] for a in arrays]
+    init_idx = sorted(range(len(lengths)), key=lambda i: lengths[i])[len(lengths) // 2]
+    barycenter = arrays[init_idx].copy().astype(float)
 
+    for i in range(n_iter):
+        barycenter = _dba_update(barycenter, arrays)
+        print(f"  DBA iteration {i + 1}/{n_iter}")
+
+    print(f"Barycenter shape: {barycenter.shape}")
     np.save(out_path, barycenter)
     print(f"Saved to {out_path}")
 
