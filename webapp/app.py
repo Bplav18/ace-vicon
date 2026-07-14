@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from model import compute_similarity_from_csv, compute_similarity_from_video
 from racket_detector import detect_racket
+from supabase_helper import supabase
 import matplotlib.pyplot as plt
 import os
 import json
@@ -13,7 +14,7 @@ import re
 matplotlib.use('Agg')
 
 app = Flask(__name__)
-app.secret_key = "tennis_secret_key_change_in_production"
+app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
 
 UPLOAD_FOLDER = "uploads"
 USERS_FILE = "users.json"
@@ -58,43 +59,31 @@ def init_db():
     conn.commit()
     conn.close()
 
+# session of a user with a specific reference player and score, 
+# along with the filename and timestamp. 
+# This allows us to track the user's progress over time and provide- 
+# feedback based on their performance compared to the reference player.
+def save_session(user_id, filename, player_key, player_name, player_style, score):
+    supabase.table("sessions").insert({
+        "user_id": user_id,
+        "filename": filename,
+        "player_key": player_key,
+        "player_name": player_name,
+        "player_style": player_style,
+        "score": score
+    }).execute()
 
-def save_session(username, filename, player_key, player_name, player_style, score):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute(
-        """
-        INSERT INTO sessions (username, filename, player_key, player_name, player_style, score, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """,
-        (
-            username,
-            filename,
-            player_key,
-            player_name,
-            player_style,
-            score,
-            datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-        ),
+
+def get_user_sessions(user_id):
+    response = (
+        supabase.table("sessions")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .execute()
     )
-    conn.commit()
-    conn.close()
 
-
-def get_user_sessions(username):
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute(
-        """
-        SELECT * FROM sessions WHERE username = ?
-        ORDER BY created_at DESC
-    """,
-        (username,),
-    )
-    rows = c.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
+    return response.data or []
 
 
 init_db()
@@ -175,15 +164,28 @@ def index():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        username = request.form["username"]
+        email = request.form["username"]
         password = request.form["password"]
-        users = load_users()
 
-        if username in users and users[username] == hash_password(password):
-            session["user"] = username
+        try:
+            response = supabase.auth.sign_in_with_password({
+                "email": email,
+                "password": password
+            })
+
+            if response.user is None or response.session is None:
+                flash("Invalid email or password")
+                return render_template("login.html")
+
+            session["user"] = email
+            session["user_id"] = response.user.id
+            session["access_token"] = response.session.access_token
+
             return redirect(url_for("home"))
 
-        flash("Invalid username or password")
+        except Exception:
+            flash("Invalid email or password")
+            return render_template("login.html")
 
     return render_template("login.html")
 
@@ -191,7 +193,7 @@ def login():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        username = request.form["username"]
+        email = request.form["username"]
         password = request.form["password"]
         confirm = request.form["confirm"]
 
@@ -199,22 +201,27 @@ def register():
             flash("Passwords do not match")
             return render_template("register.html")
 
-        errors = validate_password(password)
-        if errors:
-            flash("Password must include: " + ", ".join(errors))
+        try:
+            response = supabase.auth.sign_up({
+                "email": email,
+                "password": password
+            })
+
+            if response.user is None:
+                flash("Could not create account")
+                return render_template("register.html")
+
+            session["user"] = email
+            session["user_id"] = response.user.id
+
+            if response.session:
+                session["access_token"] = response.session.access_token
+
+            return redirect(url_for("home"))
+
+        except Exception as e:
+            flash(f"Registration failed: {e}")
             return render_template("register.html")
-
-        users = load_users()
-
-        if username in users:
-            flash("Username already taken")
-            return render_template("register.html")
-
-        users[username] = hash_password(password)
-        save_users(users)
-
-        session["user"] = username
-        return redirect(url_for("home"))
 
     return render_template("register.html")
 
@@ -238,7 +245,7 @@ def myprogress():
     if "user" not in session:
         return redirect(url_for("login"))
 
-    sessions = get_user_sessions(session["user"])
+    sessions = get_user_sessions(session["user_id"])
 
     chart_sessions = list(reversed(sessions[:10]))
     chart_labels = [s["created_at"][5:10] for s in chart_sessions]
@@ -320,12 +327,12 @@ def upload():
     feedback = PLAYER_FEEDBACK["max"]
 
     save_session(
-        username=session["user"],
-        filename=filename,
-        player_key="max",
-        player_name=feedback["name"],
-        player_style=feedback["style"],
-        score=score,
+        session["user_id"],
+        file.filename,
+        "max",
+        feedback["name"],
+        feedback["style"],
+        score
     )
 
     return render_template(
@@ -340,7 +347,12 @@ def upload():
 
 @app.route("/logout")
 def logout():
-    session.pop("user", None)
+    try:
+        supabase.auth.sign_out()
+    except Exception:
+        pass
+
+    session.clear()
     return redirect(url_for("login"))
 
 
