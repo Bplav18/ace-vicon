@@ -1,0 +1,19 @@
+{
+  "video_name": "IMG_5391.mov",
+  "video_path": "uploads/IMG_5391.mov",
+  "frame_count": 137,
+  "expected_frame_count": 137,
+  "fps": 29.989055089383438,
+  "resolution": {
+    "width": 1080,
+    "height": 1920
+  },
+  "landmark_count": 33,
+  "confidence": {
+    "min": 0.05994054302573204,
+    "max": 0.999996542930603,
+    "mean": 0.8974844341723958,
+    "median": 0.9946255683898926,
+    "missing_frames": 0
+  }
+}

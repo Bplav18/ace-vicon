@@ -1,0 +1,19 @@
+{
+  "video_name": "IMG_5355.mov",
+  "video_path": "uploads/IMG_5355.mov",
+  "frame_count": 110,
+  "expected_frame_count": 110,
+  "fps": 30.150753768844222,
+  "resolution": {
+    "width": 1920,
+    "height": 1080
+  },
+  "landmark_count": 33,
+  "confidence": {
+    "min": 0.14359499514102936,
+    "max": 0.9999977946281433,
+    "mean": 0.8754479361302925,
+    "median": 0.9907234609127045,
+    "missing_frames": 0
+  }
+}

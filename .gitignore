@@ -11,4 +11,6 @@ webapp/uploads/
 webapp/static/plot.png
 webapp/data/max_serves/
 *.csv
-!plotting/markers/**/*.csv**/.DS_Store
+!plotting/markers/**/*.csv
+!webapp/reference_players/*.csv
+**/.DS_Store
