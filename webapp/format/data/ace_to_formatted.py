@@ -28,8 +28,8 @@ OUTPUT_ORDER = list(ACE_MARKER_NAMES)
 
 
 def _load_formatdata_module(module_filename: str):
-    """Load a script from ``formatdata and render/`` (path contains spaces)."""
-    path = Path(__file__).resolve().parents[2] / "formatdata and render" / module_filename
+    """Load a script located directly in the webapp root."""
+    path = Path(__file__).resolve().parents[2] / module_filename
     if not path.is_file():
         raise FileNotFoundError(f"Formatdata module not found: {path}")
     name = f"formatdata_{path.stem}"
