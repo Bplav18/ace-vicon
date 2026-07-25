@@ -84,21 +84,13 @@ SNAPSHOT_JOINT_TO_FEATURE: dict[tuple[str, str], str] = {
 
 
 def _load_grade_snapshots_module():
-    """Load ``formatdata and render/grade_snapshots.py`` (path has spaces)."""
-    path = (
-        Path(__file__).resolve().parents[2]
-        / "formatdata and render"
-        / "grade_snapshots.py"
-    )
-    if not path.is_file():
-        raise FileNotFoundError(f"Snapshot Comparison Scoring Engine not found: {path}")
-    spec = importlib.util.spec_from_file_location("grade_snapshots", path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Could not load grade_snapshots from {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules.setdefault("grade_snapshots", module)
-    spec.loader.exec_module(module)
-    return module
+    try:
+        import grade_snapshots
+        return grade_snapshots
+    except ImportError as e:
+        raise ImportError(
+            "Could not import grade_snapshots.py from the webapp root."
+        ) from e
 
 
 def _direction_from_joint(customer_angle: float, reference_angle: float, tier: str) -> Direction:
