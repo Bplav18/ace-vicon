@@ -1,0 +1,19 @@
+{
+  "video_name": "IMG_5394.mov",
+  "video_path": "uploads/IMG_5394.mov",
+  "frame_count": 112,
+  "expected_frame_count": 112,
+  "fps": 29.98661311914324,
+  "resolution": {
+    "width": 1080,
+    "height": 1920
+  },
+  "landmark_count": 33,
+  "confidence": {
+    "min": 0.06475482136011124,
+    "max": 0.9999956488609314,
+    "mean": 0.9068628813954498,
+    "median": 0.9952249526977539,
+    "missing_frames": 0
+  }
+}
