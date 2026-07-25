@@ -466,8 +466,6 @@ def upload():
 
     try:
         if ext in VIDEO_EXTENSIONS:
-            # Temporarily skip racket detection while diagnosing memory use.
-            # Re-enable later after the main pipeline works reliably.
             print("STARTING VIDEO PIPELINE")
 
             reference_path = player["reference_files"][0]
@@ -509,13 +507,13 @@ def upload():
         flash(f"Error processing file: {e}")
         return redirect(url_for("analyse", player=player_key))
 
-    try:
-        coaching_report_data = (
-            coaching_report.to_dict()
-            if coaching_report and hasattr(coaching_report, "to_dict")
-            else coaching_report
-        )
+    coaching_report_data = (
+        coaching_report.to_dict()
+        if coaching_report and hasattr(coaching_report, "to_dict")
+        else coaching_report
+    )
 
+    try:
         save_session(
             user_id=session["user_id"],
             filename=filename,
@@ -539,7 +537,6 @@ def upload():
         flash("Analysis completed, but progress history could not be saved.")
 
     finally:
-        # Remove the original upload after processing to reduce disk usage.
         try:
             if os.path.exists(save_path):
                 os.remove(save_path)
@@ -555,102 +552,6 @@ def upload():
         plot_path=plot_path,
         grade_results=grade_results,
         coaching_report=coaching_report_data,
-        SNAPSHOT_WEIGHTS=SNAPSHOT_WEIGHTS,
-        SNAPSHOT_NAMES=SNAPSHOT_NAMES,
-    )
-
-    # ── RACKET RELEVANCE CHECK (video uploads only) ─────────
-    # CSV files have no visual content, so this only applies to videos.
-    # Rejects the upload before it ever reaches the expensive
-    # pose-extraction step.
-    if ext in VIDEO_EXTENSIONS:
-    try:
-        passed, details = detect_racket(save_path)
-    except Exception as e:
-        print(f"RACKET DETECTOR ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-
-        flash("The video could not be checked for a tennis racket.")
-        return redirect(url_for("analyse", player=player_key))
-
-    if not passed:
-        if os.path.exists(save_path):
-            os.remove(save_path)
-
-        print(f"RACKET CHECK FAILED for {filename}: {details}")
-        flash(
-            "We couldn't detect a tennis racket in your video. "
-            "Please upload a video of your serve."
-        )
-        return redirect(url_for("analyse", player=player_key))
-
-    # ── SCORING ───────────────────────────────────────────────
-    # Video uploads go through the full pipeline:
-    # video -> pose estimation -> ACE markers -> formatted CSV -> snapshots
-    # -> grade_snapshots.grade_serve() -> ScoringReport -> ScoringReportReader
-    # -> CoachingEngine -> CoachingReport (human-language feedback).
-    # See format/pipeline.py: run_video_coaching_pipeline() re-uses
-    # grade_snapshots.grade_serve() internally, so snapshot_grade below has
-    # the exact same shape the phase-bar chart in result.html already expects.
-    #
-    # CSV uploads still go through the older angle/DTW similarity path for
-    # now -- they'd need their own run through format/data + snapshot
-    # extraction before they could use the same coaching pipeline a video
-    # does. Left as a follow-up; no coaching_report is generated for CSVs.
-    try:
-        if ext in CSV_EXTENSIONS:
-            score, avg_z, ref_mean, user_traj = compute_similarity_from_csv(
-                save_path, player["reference_files"]
-            )
-            score = round(score, 1)
-            plot_path = create_plot(user_traj, ref_mean)
-            grade_results = None
-            coaching_report = None
-        else:
-            pipeline_result = run_customer_video_vs_reference_csv_pipeline(
-                save_path, player["reference_files"][0]
-            )
-            grade_results = pipeline_result.snapshot_grade
-            coaching_report = pipeline_result.coaching_report
-            score = grade_results["overall_score"]
-            plot_path = None
-
-    except Exception as e:
-        print(f"UPLOAD ERROR: {e}")
-        import traceback
-
-        traceback.print_exc()
-        flash(f"Error processing file: {str(e)}")
-        return redirect(url_for("analyse", player=player_key))
-
-    try:
-        save_session(
-            user_id=session["user_id"],
-            filename=filename,
-            player_key=player_key,
-            player_name=player["name"],
-            player_style=player["style"],
-            score=score,
-            report_data={
-                "grade_results": grade_results,
-                "coaching_report": coaching_report.to_dict() if coaching_report else None,
-                "plot_path": plot_path,
-            },
-        )
-    except Exception as e:
-        print(f"SAVE SESSION ERROR: {e}")
-        flash("Analysis completed, but progress history could not be saved.")
-
-    return render_template(
-        "result.html",
-        user=session["user"],
-        filename=filename,
-        player=player,
-        score=score,
-        plot_path=plot_path,
-        grade_results=grade_results,
-        coaching_report=coaching_report,
         SNAPSHOT_WEIGHTS=SNAPSHOT_WEIGHTS,
         SNAPSHOT_NAMES=SNAPSHOT_NAMES,
     )
