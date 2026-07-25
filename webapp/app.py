@@ -97,7 +97,7 @@ PLAYERS = {
         "style": "Kick Serve",
         "avatar": "player4.png",
         "reference_files": [
-            os.path.join(BASE_DIR, "reference_players/shelton_formatted.csv"),
+            os.path.join(BASE_DIR, "reference_players/Shelton_formatted.csv"),
         ],
         "tips": [
             "Your serve is being compared to Max's recorded Vicon motion data.",
